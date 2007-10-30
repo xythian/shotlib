@@ -4,7 +4,6 @@
 #
 
 from shotlib.daemonize import daemonize
-from shotlib.log import SpreadLogHandler
 from optparse import OptionParser, OptionGroup
 import time
 import errno
@@ -39,7 +38,7 @@ class Service(object):
                           action="store", default="-", dest="log",
                           help="Specify logging destination (default: stdout = '-')")
         group.add_option("--level",
-                          action="store", default="DEBUG", dest="level",
+                          action="store", default="WARN", dest="level",
                           help="Set the logging level (DEBUG, INFO, WARN, ERROR) default: DEBUG")
         parser.add_option_group(group)
         group = OptionGroup(parser, "Daemon options",
@@ -78,10 +77,6 @@ class Service(object):
             console.setFormatter(formatter)
         l = logging.getLogger()
         l.addHandler(console)
-        if options.daemon:
-            sl = SpreadLogHandler()
-            sl.setFormatter(formatter)
-            l.addHandler(sl)
         l.setLevel(getattr(logging, self.options.level))
 
     def handle_options(self, options, parser):
@@ -188,6 +183,9 @@ class Service(object):
             elif options.action == 'stop':
                 self.service_stop(options, parser)
                 return
+            elif options.action == 'restart':
+                self.service_stop(options, parser)
+                self.daemonize(options)
             else:
                 parser.error('Unknown action: %s' % options.action)
                 
