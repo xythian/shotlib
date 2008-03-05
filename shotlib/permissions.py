@@ -1,9 +1,10 @@
-__all__ = ['PermissionDenied', 'Role', 'Roles',
-           'Rule',
-           'Permission']
-           
+__all__ = ['PermissionDenied', 'Roles', 'Rule', 'Permission', 'Principal', 'all']
+
 from shotlib.context import context
 from shotlib.util import copyinfo
+from shotlib.enums import create_enum
+from contextlib import contextmanager
+
 import logging
 
 LOG = logging.getLogger('shotlib.permissions')
@@ -11,31 +12,18 @@ LOG = logging.getLogger('shotlib.permissions')
 class PermissionDenied(Exception):
     pass
 
-class Role(int):
-    def __new__(cls, v, name):
-        x = super(Role, cls).__new__(cls, v)
-        x.name = name
-        return x
-    def __str__(self):
-        return self.name
+Roles = create_enum('Role',
+                    'NONE',
+                    'READ',
+                    'WRITE',
+                    'MODERATE',
+                    'ADMIN',
+                    'SUPERUSER')
 
-class Roles(object):
-    NONE = Role(0, 'none')
-    READ = Role(1, 'read')
-    WRITE = Role(2, 'write')
-    MODERATE = Role(3, 'moderate')
-    ADMIN = Role(4, 'admin')
-    SUPERUSER = Role(5, 'superuser')
-
-    roles = (NONE, READ, WRITE, MODERATE, ADMIN, SUPERUSER)
-
-    implied = {}
-    names = {}
-    for role in roles:
-        implied[role] = tuple(roles[:role]) + (role,)
-        names[role.name] = role
-    del role
-
+Roles.roles = Roles.values
+Roles.implied = {}
+for role in Roles.roles:
+    Roles.implied[role] = tuple(Roles.roles[:role]) + (role,)
 
 all = []
 
@@ -124,7 +112,7 @@ class Permission(object):
 
     def test(self, target):
         assert target is not None
-        LOG.debug("Testing %s for %s on %s", self.name, self.context.user.username, target)
+        LOG.debug("Testing %s for %s on %s", self.name, self.context.user, target)
         for rule in self.rules:            
             code = rule.rule.func_code
             filename, lineno = code.co_filename, code.co_firstlineno
@@ -151,7 +139,7 @@ class Permission(object):
 
     def require(self, target):
         if not self.test(target):
-            raise PermissionDenied("%s cannot %s %s" % (self.context.user.username, self.name, target))
+            raise PermissionDenied("%s cannot %s %s" % (self.context.user, self.name, target))
         return target
 
     def requires(self, func):
@@ -161,57 +149,63 @@ class Permission(object):
             return func(*args, **kwargs)
         return wrapped
 
+class Principal(object):
+    level = Roles.NONE
+    @property
+    def roles(self):
+        return Roles.implied[self.level]
+
 if __name__ == '__main__':
-    from shotlib.context import enter, exit
+    from shotlib.context import with_user
 
-    class MyContext(object):
-        def __init__(self, user):
-            self.user = user
+    def go():
+        class MyContext(object):
+            def __init__(self, user):
+                self.user = user
 
-    class Frobazz(object):    pass
-    class Hork(Frobazz):      pass
-    class Snort(Hork):      pass    
-    class Barfle(object):     pass
+        class Frobazz(object):    pass
+        class Hork(Frobazz):      pass
+        class Snort(Hork):      pass    
+        class Barfle(object):     pass
 
-    f = Frobazz()
-    h = Hork()
-    b = Barfle()
-    s = Snort()
-    s2 = Snort()
+        f = Frobazz()
+        h = Hork()
+        b = Barfle()
+        s = Snort()
+        s2 = Snort()
 
-    bob = 'bob'
-    sue = 'sue'
+        bob = 'bob'
+        sue = 'sue'
 
-    @Permission()
-    def poke(target, user):
-        return False
+        @Permission()
+        def poke(target, user):
+            return False
 
-    @Permission()
-    def prod(target, user):
-        return False
+        @Permission()
+        def prod(target, user):
+            return False
 
-    @poke.rule(Hork)
-    def __bob1(target, user):
-        return user is bob
-    enter(MyContext(sue))
-    assert not poke(h)
-    enter(MyContext(bob))
-    assert (not poke(f))
-    assert (poke(h))
-    assert (poke(s))
-    assert (not poke(b))
+        @poke.rule(Hork)
+        def __bob1(target, user):
+            return user is bob
 
-    @poke.rule(s)
-    def __sue1(target, user):
-        return user is sue
+        def test_sue():
+            assert not poke(h)
+        def test_bob():
+            assert (not poke(f))
+            assert (poke(h))
+            assert (poke(s))
+            assert (not poke(b))
+        with_user(sue, test_sue)
+        with_user(bob, test_bob)
 
-    enter(MyContext(sue))
+        def test_sue2():
+            assert not poke(h)
+            assert not poke(s2)
+            assert poke(s)
 
-
-    assert not poke(h)
-    assert not poke(s2)
-    assert poke(s)
-    
-    bob.pants = True
-    sue.pants = False
-
+        @poke.rule(s)
+        def __sue1(target, user):
+            return user is sue
+        with_user(sue, test_sue2)
+    go()
