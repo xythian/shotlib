@@ -5,11 +5,15 @@ from shotlib.util import copyinfo
 from shotlib.enums import create_enum
 from contextlib import contextmanager
 
+import itertools
 import logging
 
 LOG = logging.getLogger('shotlib.permissions')
 
 class PermissionDenied(Exception):
+    pass
+
+class RuleConflict(Exception):
     pass
 
 Roles = create_enum('Role',
@@ -60,26 +64,38 @@ def rule_compare(first, second):
         return _pred_compare(first, second)
     else:
         return r
+
+Pass = object()
+
+class RuleList(list):    
+    def __call__(self, target, user):
+        for entry in self:
+            v = entry(target, user)
+            if v is not Pass:
+                return v
+        return Pass
         
 class Rule(object):
     def __init__(self, target, predicate, rule):
         self.target = target
-        if not predicate:
-            self.predicate = lambda x: True
-        else:
-            self.predicate = predicate
+        self.predicate = predicate
         self.rule = rule
 
     def __call__(self, target, user):
-        return self.rule(target, user)
+        ismatch = target is self.target or isinstance(target, self.target)
+        if ismatch and self.predicate:
+            ismatch = ismatch and self.predicate(target)            
+        if ismatch:
+            return self.rule(target, user)
+        else:
+            return Pass
 
-    def match(self, target):
-        if self.target == target:
-            return self.predicate(target)
-        elif isinstance(self.target, type):
-            return isinstance(target, self.target) and self.predicate(target)
+    def conflicts(self, rule):
+        if self.predicate == rule.predicate:
+            return True
         else:
             return False
+
     def __str__(self):
         return "<rule: %s %s>" % (str(self.target),
                                   str(self.predicate))
@@ -89,7 +105,7 @@ class Rule(object):
 
 class Permission(object):
     def __init__(self):
-        self.rules = []
+        self.rules = {}
         all.append(self._create_perm())
 
     def _create_perm(self):
@@ -98,8 +114,8 @@ class Permission(object):
         execute.rule = self.rule
         execute.require = self.require
         execute.contextrule = self.contextrule
+        execute.rules = self.rules
         return execute
-
 
     def __call__(self, func):
         self.__base = func
@@ -112,22 +128,29 @@ class Permission(object):
 
     def test(self, target):
         assert target is not None
-        LOG.debug("Testing %s for %s on %s", self.name, self.context.user, target)
-        for rule in self.rules:            
-            code = rule.rule.func_code
-            filename, lineno = code.co_filename, code.co_firstlineno
-            if rule.match(target):
-                result = rule(target, self.context.user)
-                LOG.debug("Rule %s:%s matched (%s)", filename, lineno, result)
-                return result
-            else:
-                LOG.debug("   Rule %s:%s did not match", filename, lineno)
+        #LOG.debug("Testing %s for %s on %s", self.name, self.context.user, target)
+        for candidate in itertools.chain([target], target.__class__.__mro__):
+            rule = self.rules.get(candidate)
+            if rule is not None:
+                return rule(target, self.context.user)
         return self.__base(target, self.context.user)
+
+    def _insert_rule(self, tgt, rule):
+        try:
+            l = self.rules[tgt]
+        except KeyError:
+            l = RuleList()
+            self.rules[tgt] = l
+        for o in l:
+            if o.conflicts(rule):
+                raise RuleConflict(), (o, rule)
+        l.append(rule)
+
 
     def rule(self, clazz, predicate=None):
         def _add(func):
-            self.rules.append(Rule(clazz, predicate, func))
-            self.rules.sort(rule_compare, reverse=True)
+            rule = Rule(clazz, predicate, func)
+            self._insert_rule(clazz, rule)
             return func
         return _add
 
