@@ -60,7 +60,6 @@ def generate_rowclass(db, name, query, args=None, kwargs=None):
         cursor.execute(query, kwargs)
     else:
         cursor.execute(query)
-    print cursor.description    
     cols = [Column(r[0], idx=i) for i, r in enumerate(cursor.description)]
     del cursor
     class RowAdapter(Record):

@@ -5,6 +5,9 @@ import re
 from itertools import ifilter
 import time
 from threading import local
+import logging
+
+LOG = logging.getLogger("shotlib.sql")
 
 __context = local()
 
@@ -358,7 +361,10 @@ def query_func(sql, func=None, decorators=(), **kwargs):
         argvals = tuple(kwargs[arg] for arg in args)
         t = time.time()
         cursor.execute(qry, argvals)
-        print "QUERY: %.2fms %s" % ((time.time() - t)*1000.0, qry), argvals
+        LOG.debug("QUERY: %.2fms: %s %r",
+                  (time.time() - t)*1000.0,
+                  qry,
+                  argvals)
         return cursor.fetchall()
     # TODO: build a better ordering mechansim for decorators
     #decorators.reverse()
