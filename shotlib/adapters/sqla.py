@@ -43,4 +43,3 @@ def create_bitfield_type(name, bitfield):
             return result
     BitfieldType.__name__ = name
     return BitfieldType
-

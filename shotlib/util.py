@@ -1,16 +1,7 @@
-__all__ = ['columnproperty',
-           'demand_property',
+__all__ = ['demand_property',
            'demandprop',
            'copyinfo']
 
-def columnproperty(idx, col, doc=None):
-    def get(self):
-        return col.from_sql(self._data[idx])
-    def set(self, v):
-        self._data[idx] = col.to_sql(v)
-    def delete(self):
-        self._data[idx] = None
-    return property(get, set, delete, doc=doc)
 
 def demand_property(name, loadfunc):
     def _get_demand_property(self):

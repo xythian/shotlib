@@ -7,6 +7,15 @@ from datetime import datetime, timedelta
 def utcnow():
     return datetime.utcnow().replace(tzinfo=pytz.utc)
 
+now = utcnow
+
+pacific = pytz.timezone('US/Pacific')
+
+def pst(t=None):
+    if t is None:
+        t = now()
+    return pacific.normalize(t.astimezone(pacific))    
+
 def relative_time_func(thresholds):
     def relative_time(when, format, now=None):
         if now is None:

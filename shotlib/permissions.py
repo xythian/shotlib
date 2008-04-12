@@ -115,6 +115,7 @@ class Permission(object):
         execute.require = self.require
         execute.contextrule = self.contextrule
         execute.rules = self.rules
+        execute.verify = self.verify
         return execute
 
     def __call__(self, func):
@@ -161,9 +162,17 @@ class Permission(object):
         return _add
 
     def require(self, target):
+        if target is None:
+            return target
         if not self.test(target):
             raise PermissionDenied("%s cannot %s %s" % (self.context.user, self.name, target))
         return target
+
+    def verify(self, func):
+        @copyinfo(func)
+        def _verify(*args, **kwargs):
+            return self.require(func(*args, **kwargs))
+        return _verify
 
     def requires(self, func):
         @copyinfo(func)
