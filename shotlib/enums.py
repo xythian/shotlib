@@ -8,6 +8,8 @@ def _create_enum(name, values, bitfield=False):
             return x
         def __str__(self):
             return '<%s:%d>' % (self.name, self)
+        def to_int(self):
+            return self + 0
     EnumValue.__name__ = name
     class EnumCollection(object):
         pass
