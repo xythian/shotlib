@@ -476,10 +476,11 @@ def defer_props(target, o, *names):
         setattr(target, name, getattr(o, name))
 
 class StorageSession(object):
-    def __init__(self, db, meta):
+    def __init__(self, db, meta, memcache=None):
         self.db = db
         self.cursor = db.cursor()
         self.meta = meta
+        self.memcache = memcache
         defer_props(self, meta,
                     'insert',
                     'insertmany',
@@ -500,7 +501,6 @@ class StorageContextManager(object):
         self.meta = meta
         self.storage = storage
         self.dbconn = dbconn
-        
 
     @contextmanager
     def __call__(self):

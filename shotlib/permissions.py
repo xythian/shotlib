@@ -133,7 +133,11 @@ class Permission(object):
         for candidate in itertools.chain([target], target.__class__.__mro__):
             rule = self.rules.get(candidate)
             if rule is not None:
-                return rule(target, self.context.user)
+                v =  rule(target, self.context.user)
+                if v is Pass:
+                    continue
+                else:
+                    return v
         return self.__base(target, self.context.user)
 
     def _insert_rule(self, tgt, rule):
@@ -163,7 +167,7 @@ class Permission(object):
 
     def require(self, target):
         if target is None:
-            return target
+            raise PermissionDenied("%s cannot %s %s" % (self.context.user, self.name, target))
         if not self.test(target):
             raise PermissionDenied("%s cannot %s %s" % (self.context.user, self.name, target))
         return target
