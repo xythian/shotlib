@@ -275,12 +275,15 @@ class FilterQuery(object):
     def __len__(self):
         return self.__count
 
-DECORATOR_REGISTRY = {'first' : take_first,
-                      'scalar' : lambda func: take_first(take_first(func))}
-
 def paginated_query(csql, dsql, cls=None, result_filter=None):
-    cfunc = query_func(csql, scalar=True)
-    qfunc = query_func(dsql, cls=cls)
+    if not callable(csql):
+        cfunc = query_func(csql, scalar=True)
+    else:
+        cfunc = csql
+    if not callable(dsql):
+        qfunc = query_func(dsql, cls=cls)
+    else:
+        qfunc = dsql
     class PaginatedQueryFilter(object):
         def __init__(self, args):
             self.__count = cfunc(**args)
@@ -332,18 +335,14 @@ def paginated_query(csql, dsql, cls=None, result_filter=None):
 def query_func(sql, func=None, decorators=(), **kwargs):
     decorators = list(decorators)
     cls = None
-    for kw, arg in kwargs.items():
-        if kw == 'self':
-            decorators.append(func)
-        elif arg is True:
-            decorators.append(DECORATOR_REGISTRY[kw])
-        elif arg is False:
-            continue
-        elif kw == 'cls' and arg is not None:
-            decorators.append(arg.row_wrap)
-            cls = arg
-        else:
-            raise Exception('Unexpected keyword argument to query_func: %s' % kw)
+    use_func = kwargs.get('f') is True
+    if kwargs.has_key('cls'):
+        cls = kwargs['cls']
+        decorators.append(cls.row_wrap)
+    if kwargs.get('first') is True:
+        decorators.append(take_first)
+    elif kwargs.get('scalar') is True:
+        decorators.append(lambda func: take_first(take_first(func)))
     if cls is not None:
         rowfunc = cls.from_row
         if cls.q.table:
@@ -366,19 +365,25 @@ def query_func(sql, func=None, decorators=(), **kwargs):
                   qry,
                   argvals)
         return cursor.fetchall()
+    def f_wrap(f):
+        def _wrap(*args, **kwargs):            
+            return func(f(*args, **kwargs))
+        return _wrap
     # TODO: build a better ordering mechansim for decorators
     #decorators.reverse()
     for decorator in decorators:
         execute_query = decorator(execute_query)
+    if use_func:
+        execute_query = f_wrap(execute_query)
     return withdb(execute_query)
 
 def query(func=None, **kwargs):
     if func is None:
         def _wrap(func):            
-            return query_func(func.__doc__, **kwargs)
+            return query_func(func.__doc__, func=func, **kwargs)
         return _wrap
     else:
-        return query_func(func.__doc__, **kwargs)
+        return query_func(func.__doc__, func=func, **kwargs)
 
 class DatabaseMetaCommon(object):
     def __init__(self, tables=None):
@@ -535,7 +540,7 @@ class RowCache(object):
                 return from_row(row)
             else:
                 result = self.__load(*args, **kwargs)
-                if result:
+                if result is not None:
                     self.data[id] = to_row(result)
                     return result
                 else:
@@ -585,17 +590,19 @@ class ItemCache(RowCache):
 
     def __call__(self, func):
         self.__load = func
+        def __read(id):
+            return self.data.get(id)
         @copyinfo(func)
         def __get(*args, **kwargs):
             id = kwargs[self._kw]
-            row = self.data.get(id)            
+            row = __read(id)            
             if row is self._missing:            
                 return self._empty
             elif row:
                 return row
             else:
                 result = self.__load(*args, **kwargs)
-                if result:
+                if result is not None:
                     self.data[id] = result
                     return result
                 else:
@@ -606,5 +613,6 @@ class ItemCache(RowCache):
         __get.cache = self
         __get.flush = self.flush
         __get.put = __put
+        __get.get = __read
         return __get
 
