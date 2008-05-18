@@ -449,9 +449,10 @@ class DatabaseMetaCommon(object):
 
     @cursormethod
     def delete(self, cursor, record):
+        rid = record.q.rowid.to_sql(getattr(record, record.q.rowid.name))
         cursor.execute("DELETE FROM %s WHERE %s = %%s" % (record.q.table,
                                                           record.q.rowid.colname),
-                       record.q.rowid.to_sql(getattr(record, record.q.rowid.name)))
+                       (rid,))
 
     def save(self, record):
         if record.is_new:
