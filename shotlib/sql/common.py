@@ -6,6 +6,7 @@ from itertools import ifilter
 import time
 from threading import local
 import logging
+import operator
 
 LOG = logging.getLogger("shotlib.sql")
 
@@ -55,6 +56,11 @@ def columnproperty(idx, col, doc=None):
         self._data[idx] = None
     return property(get, set, delete, doc=doc)
 
+class Alias(object):
+    def __init__(self, cls, name):
+        self.q = QueryInfo(columns=cls.q.columns,
+                           table=name)
+        self.row_wrap = cls.row_wrap
 
 class Column(str):
     #__slots__ = ('colname', 'select', 'update', 'insert', 'name', 'idx')
@@ -332,29 +338,48 @@ def paginated_query(csql, dsql, cls=None, result_filter=None):
         return PaginatedQueryFilter(kwargs)
     return execute
 
+def cls_tuple_unwrap(clss):
+    lengths = [len(cls.q.columns) for cls in clss]
+    funcs = [cls.from_row for cls in clss]
+    idx = 0
+    slices = []
+    for x in lengths:
+        slices.append((idx, idx + x))
+        idx += x
+    calls = zip(funcs, slices)
+    def unpack(row):
+        return [f(row[b:e]) for f, (b, e) in calls]    
+    def decorate(func):
+        @copyinfo(func)
+        def _wrapped(*args, **kwargs):            
+            return [unpack(row) for row in func(*args, **kwargs)]
+        return _wrapped
+    return decorate
+
 def query_func(sql, func=None, decorators=(), **kwargs):
     decorators = list(decorators)
     cls = None
     use_func = kwargs.get('f') is True
+    names = {}
     if kwargs.has_key('cls'):
         cls = kwargs['cls']
         decorators.append(cls.row_wrap)
+        if cls.q.table:
+            names.update({'table' : cls.q.table,
+                          'columns' : ",".join('%s.%s' % (cls.q.table, col.colname) for col in cls.q.columns)})
+        else:
+            names['columns'] = ",".join(cls.q.columns)
+    elif kwargs.has_key('clss'):
+        # this is gross-o-matic
+        clss = kwargs.get('clss')
+        decorators.append(cls_tuple_unwrap(clss))
+        for cls in clss:
+            names.update({str(cls.q.table)  : ",".join('%s.%s' % (cls.q.table, col.colname) for col in cls.q.columns)})
     if kwargs.get('first') is True:
         decorators.append(take_first)
     elif kwargs.get('scalar') is True:
         decorators.append(lambda func: take_first(take_first(func)))
-    if cls is not None:
-        rowfunc = cls.from_row
-        if cls.q.table:
-            table = cls.q.table
-            cols = ",".join('%s.%s' % (table, col.colname) for col in cls.q.columns)
-        else:
-            table = ''
-            cols = ",".join(cls.q.columns)
-    else:
-        cols = ''
-        table = ''
-    qry, args = compile_query(sql, columns=cols, table=table)
+    qry, args = compile_query(sql, **names)
     def execute_query(db, **kwargs):
         cursor = db.cursor
         argvals = tuple(kwargs[arg] for arg in args)
@@ -366,6 +391,7 @@ def query_func(sql, func=None, decorators=(), **kwargs):
                   argvals)
         return cursor.fetchall()
     def f_wrap(f):
+        @copyinfo(f)
         def _wrap(*args, **kwargs):            
             return func(f(*args, **kwargs))
         return _wrap
