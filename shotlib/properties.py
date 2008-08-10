@@ -19,6 +19,8 @@ from datetime import tzinfo, datetime, timedelta
 import time as _time
 
 LOG = logging.getLogger('shotlib.properties')
+LOG_TRACE = logging.getLogger('shotlib.trace')
+
 
 class AutoPropertyMeta(type):
     def process_properties(cls, name, bases, dict):
@@ -78,7 +80,6 @@ class ViewMeta(AutoPropertyMeta):
             pass
     process_properties = classmethod(process_properties)    
 
-LOG_TRACE = logging.getLogger('singleshot.trace')
 
 def trace(v, *args):
     if LOG_TRACE.isEnabledFor(logging.DEBUG):
@@ -163,10 +164,13 @@ class PackedRecord(object):
         else:
             self._fields = [0] * self.fieldCount
 
-    def read(cls, data, offset):
-        return offset + cls._length, cls(_data=data[offset:offset+cls._length])
-
-    read = classmethod(read)
+    @classmethod
+    def read(cls, data, offset, saveraw=False):
+        d = data[offset:offset+cls._length]
+        o = cls(_data=d)
+        if saveraw:
+            o._raw = d
+        return offset + cls._length, o
 
     def unpack(self, data):
         return list(unpack(self._format, data))
