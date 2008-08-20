@@ -29,3 +29,9 @@ def demandprop(func):
 def zip_attrs(t, row, *names):
     for i, name in enumerate(names):
         setattr(t, name, row[i])
+
+def attach_function(target):
+    def _wrap(func):
+        setattr(target, func.__name__, func)
+        return func
+    return _wrap

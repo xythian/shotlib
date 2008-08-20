@@ -643,3 +643,13 @@ class ItemCache(RowCache):
         __get.get = __read
         return __get
 
+def enum_column(enum):    
+    class RoleColumn(Column):
+        def to_sql(self, v):
+            return int(repr(v))
+        def from_sql(self, v):
+            if v is None:
+                return None
+            return enum.values[v]
+    RoleColumn.__name__ = enum.__name__ + 'Column'
+    return RoleColumn
