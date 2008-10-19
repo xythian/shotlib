@@ -14,6 +14,7 @@ class Permission(object):
             return self.test(target, user=user)
         execute.require = self.require
         execute.verify = self.verify
+        execute.test = self.test
         return execute
 
     def __call__(self, func):
