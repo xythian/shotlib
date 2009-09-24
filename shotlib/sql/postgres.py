@@ -24,10 +24,7 @@ class DatabaseMeta(DatabaseMetaCommon):
         cursor.execute("SELECT currval(%s)", (seq,))
         return cursor.fetchone()[0]
 
-def generate_tableclasses(db, schema, adapters=None):
-    cursor = db.cursor()
-    cursor.execute(Q_COLUMNS, {'schema' : schema})
-    rows = cursor.fetchall()
+def generate_tableclasses_data(rows, adapters=None):
     result = {}
     if not adapters:
         adapters = {}
@@ -48,8 +45,15 @@ def generate_tableclasses(db, schema, adapters=None):
             _table = tablename
         RowAdapter.__name__ = str(tablename)
         result[tablename] = RowAdapter
-    del cursor
     return DatabaseMeta(result)
+
+def read_tabledata(db, schema):
+    cursor = db.cursor()
+    cursor.execute(Q_COLUMNS, {'schema' : schema})
+    return cursor.fetchall()
+
+def generate_tableclasses(db, schema, adapters=None):
+    return generate_tableclasses_data(read_tabledata(db, schema), adapters=adapters)
 
 def generate_rowclass(db, name, query, args=None, kwargs=None):
     cursor = db.cursor()
@@ -67,4 +71,6 @@ def generate_rowclass(db, name, query, args=None, kwargs=None):
         _columns = cols
     RowAdapter.__name__ = str(name)
     return RowAdapter
-        
+
+if __name__ == '__main__':
+    main()
