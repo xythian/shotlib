@@ -2,6 +2,7 @@
 # Time related utility functions
 #
 import pytz
+import calendar
 from datetime import datetime, timedelta
 
 def utcnow():
@@ -10,6 +11,12 @@ def utcnow():
 now = utcnow
 
 pacific = pytz.timezone('US/Pacific')
+
+def utcfromtimestamp(ts):
+    return datetime.utcfromtimestamp(ts).replace(tzinfo=pytz.utc)
+
+def utcfromtuple(tpl):
+    return datetime.utcfromtimestamp(calendar.timegm(tpl)).replace(tzinfo=pytz.utc)
 
 def pst(t=None):
     if t is None:
