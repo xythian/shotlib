@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 setup (
     name = "shotlib",
-    version = "0.3",
+    version = "0.5",
     packages = find_packages(),
     author = "Ken Fox",
     author_email = "fox@xythian.com",
