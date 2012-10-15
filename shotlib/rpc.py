@@ -127,27 +127,10 @@ class LocalTransport(object):
 
 try:
     import zmq
-    import msgpack
-    class ZMQTransportClient(object):
-        def __init__(self, reqsock=None):
-            self._sock = reqsock
-
-        def send(self, datum):
-            self._sock.send(msgpack.packb(datum))
-            return msgpack.unpackb(self._sock.recv())
-
-    class ZMQTransportServer(object):
-        def __init__(self, service, repsock=None):
-            self._sock = repsock
-            self.target = service
-
-        def run(self):
-            while True:
-                self._sock.send(msgpack.packb(self.target.dispatch(msgpack.unpackb(self._sock.recv()))))
-
     import eventlet, uuid
     from eventlet.event import Event
     from eventlet.timeout import Timeout
+
     def zmqproxy_client(sock, timeout=600):
         work = {}
         def _sendrecv(msg):
@@ -170,6 +153,26 @@ try:
                     evt.send(body)
         eventlet.spawn_n(_dispatch_responses)
         return _sendrecv
+
+
+    import msgpack
+    class ZMQTransportClient(object):
+        def __init__(self, reqsock=None):
+            self._sock = reqsock
+
+        def send(self, datum):
+            self._sock.send(msgpack.packb(datum))
+            return msgpack.unpackb(self._sock.recv())
+
+    class ZMQTransportServer(object):
+        def __init__(self, service, repsock=None):
+            self._sock = repsock
+            self.target = service
+
+        def run(self):
+            while True:
+                self._sock.send(msgpack.packb(self.target.dispatch(msgpack.unpackb(self._sock.recv()))))
+
 
     def zmqpush_client(sock, result=None):
         def _push(msg):
